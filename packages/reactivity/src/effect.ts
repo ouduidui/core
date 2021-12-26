@@ -87,6 +87,7 @@ export class ReactiveEffect<T = any> {
         } else {
           cleanupEffect(this)
         }
+        // 执行用户传进来的fn函数，并将结果返回
         return this.fn()
       } finally {
         if (effectTrackDepth <= maxMarkerBits) {
@@ -98,6 +99,7 @@ export class ReactiveEffect<T = any> {
         resetTracking()
         effectStack.pop()
         const n = effectStack.length
+        // 将this赋值给全局遍历activeEffect，便于track进行依赖收集
         activeEffect = n > 0 ? effectStack[n - 1] : undefined
       }
     }
@@ -150,12 +152,14 @@ export function effect<T = any>(
     fn = (fn as ReactiveEffectRunner).effect.fn
   }
 
+  // 创建一个ReactiveEffect示例
   const _effect = new ReactiveEffect(fn)
   if (options) {
     extend(_effect, options)
     if (options.scope) recordEffectScope(_effect, options.scope)
   }
   if (!options || !options.lazy) {
+    // 执行run函数，即执行fn函数，触发函数中的响应式数据get操作
     _effect.run()
   }
   const runner = _effect.run.bind(_effect) as ReactiveEffectRunner
@@ -189,10 +193,15 @@ export function track(target: object, type: TrackOpTypes, key: unknown) {
   if (!isTracking()) {
     return
   }
+
+  // 判断是否初始化过depsMap
   let depsMap = targetMap.get(target)
   if (!depsMap) {
+    // 初始化depsMap逻辑
     targetMap.set(target, (depsMap = new Map()))
   }
+
+  // 获取依赖dep
   let dep = depsMap.get(key)
   if (!dep) {
     depsMap.set(key, (dep = createDep()))
@@ -202,6 +211,7 @@ export function track(target: object, type: TrackOpTypes, key: unknown) {
     ? { effect: activeEffect, target, type, key }
     : undefined
 
+  // 进行依赖收集
   trackEffects(dep, eventInfo)
 }
 
@@ -225,6 +235,7 @@ export function trackEffects(
   }
 
   if (shouldTrack) {
+    // 将activeEffect进行收集，存在dep中
     dep.add(activeEffect!)
     activeEffect!.deps.push(dep)
     if (__DEV__ && activeEffect!.onTrack) {
@@ -248,12 +259,15 @@ export function trigger(
   oldValue?: unknown,
   oldTarget?: Map<unknown, unknown> | Set<unknown>
 ) {
+
+  // 获取依赖
   const depsMap = targetMap.get(target)
   if (!depsMap) {
     // never been tracked
     return
   }
 
+  // 将depsMap的所有依赖存放到deps数组里
   let deps: (Dep | undefined)[] = []
   if (type === TriggerOpTypes.CLEAR) {
     // collection being cleared
@@ -313,6 +327,7 @@ export function trigger(
       }
     }
   } else {
+    // 获取需要触发的所有effects
     const effects: ReactiveEffect[] = []
     for (const dep of deps) {
       if (dep) {
@@ -322,6 +337,8 @@ export function trigger(
     if (__DEV__) {
       triggerEffects(createDep(effects), eventInfo)
     } else {
+      // 触发依赖
+      // 使用createDep进行排重
       triggerEffects(createDep(effects))
     }
   }
@@ -332,6 +349,7 @@ export function triggerEffects(
   debuggerEventExtraInfo?: DebuggerEventExtraInfo
 ) {
   // spread into array for stabilization
+  // 遍历所有effects，执行run函数，即调用effect传入的fn函数
   for (const effect of isArray(dep) ? dep : [...dep]) {
     if (effect !== activeEffect || effect.allowRecurse) {
       if (__DEV__ && effect.onTrigger) {

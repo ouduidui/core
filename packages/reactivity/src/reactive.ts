@@ -85,15 +85,17 @@ export type UnwrapNestedRefs<T> = T extends Ref ? T : UnwrapRefSimple<T>
  * ```
  */
 export function reactive<T extends object>(target: T): UnwrapNestedRefs<T>
-export function reactive(target: object) {
+export function reactive(target: object) {  // 接收一个对象
   // if trying to observe a readonly proxy, return the readonly version.
   if (target && (target as Target)[ReactiveFlags.IS_READONLY]) {
     return target
   }
+
+  // 使用createReactiveObject函数来进行创建响应式数据
   return createReactiveObject(
     target,
     false,
-    mutableHandlers,
+    mutableHandlers,  // 处理器对象
     mutableCollectionHandlers,
     reactiveMap
   )
@@ -178,6 +180,14 @@ export function shallowReadonly<T extends object>(
   )
 }
 
+/**
+ * 创建响应式对象
+ * @param target 目标对象
+ * @param isReadonly 是否只读
+ * @param baseHandlers 处理器
+ * @param collectionHandlers
+ * @param proxyMap 响应式数据Map
+ */
 function createReactiveObject(
   target: Target,
   isReadonly: boolean,
@@ -200,6 +210,8 @@ function createReactiveObject(
     return target
   }
   // target already has corresponding Proxy
+  // 如果含有该target对象已经进行过响应式处理的话，就直接返回
+  // 使用缓存做的优化点
   const existingProxy = proxyMap.get(target)
   if (existingProxy) {
     return existingProxy
@@ -209,10 +221,14 @@ function createReactiveObject(
   if (targetType === TargetType.INVALID) {
     return target
   }
+
+  // vue3响应式核心 —— Proxy
+  // 目的是可以侦听到用户 get 和 set 动作
   const proxy = new Proxy(
     target,
     targetType === TargetType.COLLECTION ? collectionHandlers : baseHandlers
   )
+  // 将创建好的proxy存储起来
   proxyMap.set(target, proxy)
   return proxy
 }

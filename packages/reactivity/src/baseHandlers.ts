@@ -77,6 +77,7 @@ function createArrayInstrumentations() {
   return instrumentations
 }
 
+// 创建get的处理函数
 function createGetter(isReadonly = false, shallow = false) {
   return function get(target: Target, key: string | symbol, receiver: object) {
     if (key === ReactiveFlags.IS_REACTIVE) {
@@ -104,13 +105,17 @@ function createGetter(isReadonly = false, shallow = false) {
       return Reflect.get(arrayInstrumentations, key, receiver)
     }
 
+    // 获取get访问的值，最终将res返回出去
     const res = Reflect.get(target, key, receiver)
 
     if (isSymbol(key) ? builtInSymbols.has(key) : isNonTrackableKeys(key)) {
       return res
     }
 
+    // 如果是readonly只读的话，是不可以被set的，因此也就不可能触发到trigger
+    // 因此当时readonly的时候，就没有收集依赖的必要了
     if (!isReadonly) {
+      // 在触发get的时候进行依赖收集
       track(target, TrackOpTypes.GET, key)
     }
 
@@ -128,9 +133,11 @@ function createGetter(isReadonly = false, shallow = false) {
       // Convert returned value into a proxy as well. we do the isObject check
       // here to avoid invalid value warning. Also need to lazy access readonly
       // and reactive here to avoid circular dependency.
+      // 如果res是对象的话，那么我们需要把获取的res也转化成reactive，也就是将其都用reactive包裹，变成响应式对象
       return isReadonly ? readonly(res) : reactive(res)
     }
 
+    // 最后将res值返回出去
     return res
   }
 }
@@ -161,15 +168,20 @@ function createSetter(shallow = false) {
       isArray(target) && isIntegerKey(key)
         ? Number(key) < target.length
         : hasOwn(target, key)
+
+    // 使用Reflect.set设置新值，并获取result最后返回出去
     const result = Reflect.set(target, key, value, receiver)
     // don't trigger if target is something up in the prototype chain of original
     if (target === toRaw(receiver)) {
+      // 执行trigger触发依赖
       if (!hadKey) {
         trigger(target, TriggerOpTypes.ADD, key, value)
       } else if (hasChanged(value, oldValue)) {
         trigger(target, TriggerOpTypes.SET, key, value, oldValue)
       }
     }
+
+    // 将result返回
     return result
   }
 }
@@ -179,6 +191,7 @@ function deleteProperty(target: object, key: string | symbol): boolean {
   const oldValue = (target as any)[key]
   const result = Reflect.deleteProperty(target, key)
   if (result && hadKey) {
+    // 触发依赖
     trigger(target, TriggerOpTypes.DELETE, key, undefined, oldValue)
   }
   return result
@@ -187,22 +200,25 @@ function deleteProperty(target: object, key: string | symbol): boolean {
 function has(target: object, key: string | symbol): boolean {
   const result = Reflect.has(target, key)
   if (!isSymbol(key) || !builtInSymbols.has(key)) {
+    // 收集依赖
     track(target, TrackOpTypes.HAS, key)
   }
   return result
 }
 
 function ownKeys(target: object): (string | symbol)[] {
+  // 收集依赖
   track(target, TrackOpTypes.ITERATE, isArray(target) ? 'length' : ITERATE_KEY)
   return Reflect.ownKeys(target)
 }
 
+// 处理器对象
 export const mutableHandlers: ProxyHandler<object> = {
-  get,
-  set,
-  deleteProperty,
-  has,
-  ownKeys
+  get,  // 拦截获取操作
+  set,  // 拦截设置操作
+  deleteProperty,   // 拦截删除操作
+  has,   // 拦截in操作
+  ownKeys  // 拦截 Reflect.ownKeys()
 }
 
 export const readonlyHandlers: ProxyHandler<object> = {
