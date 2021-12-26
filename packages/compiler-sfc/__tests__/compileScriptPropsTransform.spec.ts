@@ -6,7 +6,7 @@ describe('sfc props transform', () => {
   function compile(src: string, options?: Partial<SFCScriptCompileOptions>) {
     return compileSFCScript(src, {
       inlineTemplate: true,
-      propsDestructureTransform: true,
+      reactivityTransform: true,
       ...options
     })
   }
@@ -83,7 +83,7 @@ describe('sfc props transform', () => {
     const { content } = compile(
       `
       <script setup lang="ts">
-      const { foo = 1, bar = {} } = defineProps<{ foo?: number, bar?: object, baz?: any, boola?: boolean, boolb?: boolean | number }>()
+      const { foo = 1, bar = {}, func = () => {} } = defineProps<{ foo?: number, bar?: object, baz?: any, boola?: boolean, boolb?: boolean | number, func?: Function }>()
       </script>
     `,
       { isProd: true }
@@ -95,7 +95,8 @@ describe('sfc props transform', () => {
     bar: { default: () => {} },
     baz: null,
     boola: { type: Boolean },
-    boolb: { type: [Boolean, Number] }
+    boolb: { type: [Boolean, Number] },
+    func: { type: Function, default: () => () => {} }
   }`)
     assertCode(content)
   })
@@ -142,6 +143,23 @@ describe('sfc props transform', () => {
       baz: BindingTypes.PROPS,
       rest: BindingTypes.SETUP_CONST
     })
+  })
+
+  test('$$() escape', () => {
+    const { content } = compile(`
+      <script setup>
+      const { foo, bar: baz } = defineProps(['foo'])
+      console.log($$(foo))
+      console.log($$(baz))
+      $$({ foo, baz })
+      </script>
+    `)
+    expect(content).toMatch(`const __props_foo = _toRef(__props, 'foo')`)
+    expect(content).toMatch(`const __props_bar = _toRef(__props, 'bar')`)
+    expect(content).toMatch(`console.log((__props_foo))`)
+    expect(content).toMatch(`console.log((__props_bar))`)
+    expect(content).toMatch(`({ foo: __props_foo, baz: __props_bar })`)
+    assertCode(content)
   })
 
   describe('errors', () => {

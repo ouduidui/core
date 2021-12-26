@@ -1,5 +1,25 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
+exports[`sfc props transform $$() escape 1`] = `
+"import { toRef as _toRef } from 'vue'
+
+export default {
+  props: ['foo'],
+  setup(__props) {
+const __props_bar = _toRef(__props, 'bar')
+const __props_foo = _toRef(__props, 'foo')
+
+      
+      console.log((__props_foo))
+      console.log((__props_bar))
+      ({ foo: __props_foo, baz: __props_bar })
+      
+return () => {}
+}
+
+}"
+`;
+
 exports[`sfc props transform aliasing 1`] = `
 "import { toDisplayString as _toDisplayString } from \\"vue\\"
 
@@ -84,7 +104,8 @@ export default /*#__PURE__*/_defineComponent({
     bar: { default: () => {} },
     baz: null,
     boola: { type: Boolean },
-    boolb: { type: [Boolean, Number] }
+    boolb: { type: [Boolean, Number] },
+    func: { type: Function, default: () => () => {} }
   },
   setup(__props: any) {
 
