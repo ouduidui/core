@@ -85,7 +85,9 @@ export type UnwrapNestedRefs<T> = T extends Ref ? T : UnwrapRefSimple<T>
  * ```
  */
 export function reactive<T extends object>(target: T): UnwrapNestedRefs<T>
-export function reactive(target: object) {  // 接收一个对象
+
+// 生成响应式对象
+export function reactive(target: object) {
   // if trying to observe a readonly proxy, return the readonly version.
   if (target && (target as Target)[ReactiveFlags.IS_READONLY]) {
     return target
@@ -96,7 +98,7 @@ export function reactive(target: object) {  // 接收一个对象
     target,
     false,
     mutableHandlers,  // 处理器对象
-    mutableCollectionHandlers,
+    mutableCollectionHandlers,  // 集合处理器对象
     reactiveMap
   )
 }
@@ -184,8 +186,8 @@ export function shallowReadonly<T extends object>(
  * 创建响应式对象
  * @param target 目标对象
  * @param isReadonly 是否只读
- * @param baseHandlers 处理器
- * @param collectionHandlers
+ * @param baseHandlers 基本处理器
+ * @param collectionHandlers 集合类型的处理器
  * @param proxyMap 响应式数据Map
  */
 function createReactiveObject(
@@ -217,6 +219,7 @@ function createReactiveObject(
     return existingProxy
   }
   // only a whitelist of value types can be observed.
+  // 判断target是普通对象还是集合
   const targetType = getTargetType(target)
   if (targetType === TargetType.INVALID) {
     return target

@@ -78,7 +78,7 @@ function createArrayInstrumentations() {
   return instrumentations
 }
 
-// 创建get的处理函数
+// 创建Proxy的get处理函数
 function createGetter(isReadonly = false, shallow = false) {
   return function get(target: Target, key: string | symbol, receiver: object) {
     if (key === ReactiveFlags.IS_REACTIVE) {
@@ -146,6 +146,10 @@ function createGetter(isReadonly = false, shallow = false) {
 const set = /*#__PURE__*/ createSetter()
 const shallowSet = /*#__PURE__*/ createSetter(true)
 
+/**
+ * 创建Proxy的set处理函数
+ * @param shallow
+ */
 function createSetter(shallow = false) {
   return function set(
     target: object,
@@ -187,9 +191,15 @@ function createSetter(shallow = false) {
   }
 }
 
+/**
+ * proxy的deleteProperty处理函数
+ * @param target
+ * @param key
+ */
 function deleteProperty(target: object, key: string | symbol): boolean {
   const hadKey = hasOwn(target, key)
   const oldValue = (target as any)[key]
+  // 执行删除操作
   const result = Reflect.deleteProperty(target, key)
   if (result && hadKey) {
     // 触发依赖
@@ -198,7 +208,13 @@ function deleteProperty(target: object, key: string | symbol): boolean {
   return result
 }
 
+/**
+ * proxy的has操作处理器
+ * @param target
+ * @param key
+ */
 function has(target: object, key: string | symbol): boolean {
+  // 执行has操作
   const result = Reflect.has(target, key)
   if (!isSymbol(key) || !builtInSymbols.has(key)) {
     // 收集依赖
@@ -207,13 +223,17 @@ function has(target: object, key: string | symbol): boolean {
   return result
 }
 
+/**
+ * proxy的ownKeys操作处理器
+ * @param target
+ */
 function ownKeys(target: object): (string | symbol)[] {
   // 收集依赖
   track(target, TrackOpTypes.ITERATE, isArray(target) ? 'length' : ITERATE_KEY)
   return Reflect.ownKeys(target)
 }
 
-// 处理器对象
+// 可变的proxy处理器对象
 export const mutableHandlers: ProxyHandler<object> = {
   get,  // 拦截获取操作
   set,  // 拦截设置操作

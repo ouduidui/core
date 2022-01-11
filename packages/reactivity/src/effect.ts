@@ -344,6 +344,9 @@ export function trigger(
   }
 }
 
+/**
+ * 遍历所有依赖，执行effect
+ */
 export function triggerEffects(
   dep: Dep | ReactiveEffect[],
   debuggerEventExtraInfo?: DebuggerEventExtraInfo
