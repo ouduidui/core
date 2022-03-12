@@ -27,10 +27,10 @@ export interface Target {
   [ReactiveFlags.RAW]?: any
 }
 
-export const reactiveMap = new WeakMap<Target, any>()
-export const shallowReactiveMap = new WeakMap<Target, any>()
-export const readonlyMap = new WeakMap<Target, any>()
-export const shallowReadonlyMap = new WeakMap<Target, any>()
+export const reactiveMap = new WeakMap<Target, any>()  // reactive数据的映射表
+export const shallowReactiveMap = new WeakMap<Target, any>()  // shallowReactive数据的映射表
+export const readonlyMap = new WeakMap<Target, any>()  // readonly数据的映射表
+export const shallowReadonlyMap = new WeakMap<Target, any>()  // shallowReadonly数据的映射表
 
 const enum TargetType {
   INVALID = 0,
@@ -38,6 +38,7 @@ const enum TargetType {
   COLLECTION = 2
 }
 
+// 对象类型映射表
 function targetTypeMap(rawType: string) {
   switch (rawType) {
     case 'Object':
@@ -53,6 +54,7 @@ function targetTypeMap(rawType: string) {
   }
 }
 
+// 获取目标对象类型
 function getTargetType(value: Target) {
   return value[ReactiveFlags.SKIP] || !Object.isExtensible(value)
     ? TargetType.INVALID
@@ -219,8 +221,8 @@ function createReactiveObject(
     return existingProxy
   }
   // only a whitelist of value types can be observed.
-  // 判断target是普通对象还是集合
   const targetType = getTargetType(target)
+  // 如果target不是对象、数组、map、set、weakMap、weakSet，则直接返回
   if (targetType === TargetType.INVALID) {
     return target
   }
@@ -236,6 +238,7 @@ function createReactiveObject(
   return proxy
 }
 
+// 判断是否为reactive对象
 export function isReactive(value: unknown): boolean {
   if (isReadonly(value)) {
     return isReactive((value as Target)[ReactiveFlags.RAW])
@@ -243,14 +246,17 @@ export function isReactive(value: unknown): boolean {
   return !!(value && (value as Target)[ReactiveFlags.IS_REACTIVE])
 }
 
+// 判断是否为只读对象
 export function isReadonly(value: unknown): boolean {
   return !!(value && (value as Target)[ReactiveFlags.IS_READONLY])
 }
 
+// 判断是否为Proxy对象
 export function isProxy(value: unknown): boolean {
   return isReactive(value) || isReadonly(value)
 }
 
+// 获取原始对象
 export function toRaw<T>(observed: T): T {
   const raw = observed && (observed as Target)[ReactiveFlags.RAW]
   return raw ? toRaw(raw) : observed
@@ -261,8 +267,10 @@ export function markRaw<T extends object>(value: T): T {
   return value
 }
 
+// 响应式处理
 export const toReactive = <T extends unknown>(value: T): T =>
   isObject(value) ? reactive(value) : value
 
+// 只读处理
 export const toReadonly = <T extends unknown>(value: T): T =>
   isObject(value) ? readonly(value as Record<any, any>) : value

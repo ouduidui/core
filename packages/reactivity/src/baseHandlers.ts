@@ -45,6 +45,7 @@ const shallowReadonlyGet = /*#__PURE__*/ createGetter(true, true)
 
 const arrayInstrumentations = /*#__PURE__*/ createArrayInstrumentations()
 
+// 处理数组的原型方法
 function createArrayInstrumentations() {
   const instrumentations: Record<string, Function> = {}
   // instrument identity-sensitive Array methods to account for possible reactive
@@ -53,6 +54,7 @@ function createArrayInstrumentations() {
     instrumentations[key] = function (this: unknown[], ...args: unknown[]) {
       const arr = toRaw(this) as any
       for (let i = 0, l = this.length; i < l; i++) {
+        // 收集依赖
         track(arr, TrackOpTypes.GET, i + '')
       }
       // we run the method using the original args first (which may be reactive)
@@ -67,8 +69,10 @@ function createArrayInstrumentations() {
   })
   // instrument length-altering mutation methods to avoid length being tracked
   // which leads to infinite loops in some cases (#2137)
+  // 因为执行以下方法时，会改变数组元素，因此会触发到set操作，如果插入的是对象的话，在setter会触发依赖搜集，因此在这里无需再次依赖搜集
   ;(['push', 'pop', 'shift', 'unshift', 'splice'] as const).forEach(key => {
     instrumentations[key] = function (this: unknown[], ...args: unknown[]) {
+      // 不需要收集依赖
       pauseTracking()
       const res = (toRaw(this) as any)[key].apply(this, args)
       resetTracking()
@@ -82,9 +86,9 @@ function createArrayInstrumentations() {
 function createGetter(isReadonly = false, shallow = false) {
   return function get(target: Target, key: string | symbol, receiver: object) {
     if (key === ReactiveFlags.IS_REACTIVE) {
-      return !isReadonly
+      return !isReadonly // 用于isReactive函数
     } else if (key === ReactiveFlags.IS_READONLY) {
-      return isReadonly
+      return isReadonly  // 用于isReadonly函数
     } else if (
       key === ReactiveFlags.RAW &&
       receiver ===
@@ -97,11 +101,12 @@ function createGetter(isReadonly = false, shallow = false) {
           : reactiveMap
         ).get(target)
     ) {
-      return target
+      return target  // 用于toRaw函数
     }
 
     const targetIsArray = isArray(target)
 
+    // 调用数组原生方法
     if (!isReadonly && targetIsArray && hasOwn(arrayInstrumentations, key)) {
       return Reflect.get(arrayInstrumentations, key, receiver)
     }
@@ -109,6 +114,7 @@ function createGetter(isReadonly = false, shallow = false) {
     // 获取get访问的值，最终将res返回出去
     const res = Reflect.get(target, key, receiver)
 
+    // 如果是内置符号属性或者vue特有属性，无需触发依赖搜集
     if (isSymbol(key) ? builtInSymbols.has(key) : isNonTrackableKeys(key)) {
       return res
     }
@@ -124,17 +130,18 @@ function createGetter(isReadonly = false, shallow = false) {
       return res
     }
 
+    // 如果结果是ref对象，返回.value
     if (isRef(res)) {
       // ref unwrapping - does not apply for Array + integer key.
       const shouldUnwrap = !targetIsArray || !isIntegerKey(key)
       return shouldUnwrap ? res.value : res
     }
 
+    // 如果res是对象的话，那么我们需要把获取的res也转化成reactive，也就是将其都用reactive包裹，变成响应式对象
     if (isObject(res)) {
       // Convert returned value into a proxy as well. we do the isObject check
       // here to avoid invalid value warning. Also need to lazy access readonly
       // and reactive here to avoid circular dependency.
-      // 如果res是对象的话，那么我们需要把获取的res也转化成reactive，也就是将其都用reactive包裹，变成响应式对象
       return isReadonly ? readonly(res) : reactive(res)
     }
 
@@ -159,6 +166,7 @@ function createSetter(shallow = false) {
   ): boolean {
     let oldValue = (target as any)[key]
     if (!shallow && !isReadonly(value)) {
+      // 将value和oldValue获取原始值
       value = toRaw(value)
       oldValue = toRaw(oldValue)
       if (!isArray(target) && isRef(oldValue) && !isRef(value)) {
@@ -169,6 +177,7 @@ function createSetter(shallow = false) {
       // in shallow mode, objects are set as-is regardless of reactive or not
     }
 
+    // 判断是否之前是否有此值
     const hadKey =
       isArray(target) && isIntegerKey(key)
         ? Number(key) < target.length

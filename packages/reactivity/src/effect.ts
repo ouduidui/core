@@ -44,12 +44,13 @@ export type DebuggerEventExtraInfo = {
   oldTarget?: Map<any, any> | Set<any>
 }
 
-const effectStack: ReactiveEffect[] = []
-let activeEffect: ReactiveEffect | undefined
+const effectStack: ReactiveEffect[] = []  // 副作用函数栈，常用于嵌套effect情况下
+let activeEffect: ReactiveEffect | undefined  // 当前正在执行的副作用函数
 
 export const ITERATE_KEY = Symbol(__DEV__ ? 'iterate' : '')
 export const MAP_KEY_ITERATE_KEY = Symbol(__DEV__ ? 'Map key iterate' : '')
 
+// 响应式副作用
 export class ReactiveEffect<T = any> {
   active = true
   deps: Dep[] = []
@@ -71,13 +72,16 @@ export class ReactiveEffect<T = any> {
     recordEffectScope(this, scope)
   }
 
+  // 执行副作用函数
   run() {
     if (!this.active) {
       return this.fn()
     }
     if (!effectStack.includes(this)) {
       try {
+        // 设置activeEffect为当前副作用函数，并入栈
         effectStack.push((activeEffect = this))
+        // 开启允许依赖收集模式
         enableTracking()
 
         trackOpBit = 1 << ++effectTrackDepth
@@ -96,10 +100,12 @@ export class ReactiveEffect<T = any> {
 
         trackOpBit = 1 << --effectTrackDepth
 
+        // 回复上一个依赖收集模式
         resetTracking()
+        // 将当前effect弹出栈
         effectStack.pop()
         const n = effectStack.length
-        // 将this赋值给全局遍历activeEffect，便于track进行依赖收集
+        // 将activeEffect设置为上一个effect函数或undefined
         activeEffect = n > 0 ? effectStack[n - 1] : undefined
       }
     }
@@ -144,6 +150,7 @@ export interface ReactiveEffectRunner<T = any> {
   effect: ReactiveEffect
 }
 
+// 绑定副作用函数
 export function effect<T = any>(
   fn: () => T,
   options?: ReactiveEffectOptions
@@ -152,7 +159,7 @@ export function effect<T = any>(
     fn = (fn as ReactiveEffectRunner).effect.fn
   }
 
-  // 创建一个ReactiveEffect示例
+  // 创建一个ReactiveEffect实例
   const _effect = new ReactiveEffect(fn)
   if (options) {
     extend(_effect, options)
@@ -171,24 +178,28 @@ export function stop(runner: ReactiveEffectRunner) {
   runner.effect.stop()
 }
 
-let shouldTrack = true
+let shouldTrack = true // 限制是否可以进行依赖收集
 const trackStack: boolean[] = []
 
+// 暂停依赖收集
 export function pauseTracking() {
   trackStack.push(shouldTrack)
   shouldTrack = false
 }
 
+// 开启依赖收集
 export function enableTracking() {
   trackStack.push(shouldTrack)
   shouldTrack = true
 }
 
+// 重置依赖收集
 export function resetTracking() {
   const last = trackStack.pop()
   shouldTrack = last === undefined ? true : last
 }
 
+// 依赖搜集
 export function track(target: object, type: TrackOpTypes, key: unknown) {
   if (!isTracking()) {
     return
@@ -215,10 +226,12 @@ export function track(target: object, type: TrackOpTypes, key: unknown) {
   trackEffects(dep, eventInfo)
 }
 
+// 判断是否可以进行依赖收集
 export function isTracking() {
   return shouldTrack && activeEffect !== undefined
 }
 
+// 依赖收集副作用函数
 export function trackEffects(
   dep: Dep,
   debuggerEventExtraInfo?: DebuggerEventExtraInfo
@@ -237,6 +250,7 @@ export function trackEffects(
   if (shouldTrack) {
     // 将activeEffect进行收集，存在dep中
     dep.add(activeEffect!)
+    // 在effect实例中也绑定响应式数据的依赖
     activeEffect!.deps.push(dep)
     if (__DEV__ && activeEffect!.onTrack) {
       activeEffect!.onTrack(
@@ -251,6 +265,7 @@ export function trackEffects(
   }
 }
 
+// 触发依赖更新
 export function trigger(
   target: object,
   type: TriggerOpTypes,
@@ -274,6 +289,7 @@ export function trigger(
     // trigger all effects for target
     deps = [...depsMap.values()]
   } else if (key === 'length' && isArray(target)) {
+    // 如果是设置length值
     depsMap.forEach((dep, key) => {
       if (key === 'length' || key >= (newValue as number)) {
         deps.push(dep)

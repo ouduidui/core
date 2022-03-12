@@ -174,10 +174,12 @@ export type CreateAppFunction<HostElement> = (
 
 let uid = 0
 
+// 用于创建createApp函数
 export function createAppAPI<HostElement>(
   render: RootRenderFunction,
   hydrate?: RootHydrateFunction
 ): CreateAppFunction<HostElement> {
+  // 实现createApp方法
   return function createApp(rootComponent, rootProps = null) {
     if (rootProps != null && !isObject(rootProps)) {
       __DEV__ && warn(`root props passed to app.mount() must be an object.`)
@@ -211,6 +213,7 @@ export function createAppAPI<HostElement>(
         }
       },
 
+      // 注册全局插件
       use(plugin: Plugin, ...options: any[]) {
         if (installedPlugins.has(plugin)) {
           __DEV__ && warn(`Plugin has already been applied to target app.`)
@@ -229,6 +232,7 @@ export function createAppAPI<HostElement>(
         return app
       },
 
+      // 混入
       mixin(mixin: ComponentOptions) {
         if (__FEATURE_OPTIONS_API__) {
           if (!context.mixins.includes(mixin)) {
@@ -245,6 +249,7 @@ export function createAppAPI<HostElement>(
         return app
       },
 
+      // 注册全局方法
       component(name: string, component?: Component): any {
         if (__DEV__) {
           validateComponentName(name, context.config)
@@ -274,12 +279,14 @@ export function createAppAPI<HostElement>(
         return app
       },
 
+      // 挂载
       mount(
         rootContainer: HostElement,
         isHydrate?: boolean,
         isSVG?: boolean
       ): any {
         if (!isMounted) {
+          // 创建虚拟节点
           const vnode = createVNode(
             rootComponent as ConcreteComponent,
             rootProps

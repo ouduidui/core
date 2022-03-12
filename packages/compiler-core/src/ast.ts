@@ -548,6 +548,7 @@ export const locStub: SourceLocation = {
   end: { line: 1, column: 1, offset: 0 }
 }
 
+// 创建一个根AST
 export function createRoot(
   children: TemplateChildNode[],
   loc = locStub

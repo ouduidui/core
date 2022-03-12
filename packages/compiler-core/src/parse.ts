@@ -66,8 +66,9 @@ const decodeMap: Record<string, string> = {
   quot: '"'
 }
 
+// 默认配置
 export const defaultParserOptions: MergedParserOptions = {
-  delimiters: [`{{`, `}}`],
+  delimiters: [`{{`, `}}`],  // 插值分隔符
   getNamespace: () => Namespaces.HTML,
   getTextMode: () => TextModes.DATA,
   isVoidTag: NO,
@@ -101,22 +102,25 @@ export interface ParserContext {
   onWarn: NonNullable<ErrorHandlingOptions['onWarn']>
 }
 
+// 核心函数，将模板字符串解析AST
 export function baseParse(
   content: string,
   options: ParserOptions = {}
 ): RootNode {
-  const context = createParserContext(content, options)
+  const context = createParserContext(content, options)  // 创建一个解析上下文
   const start = getCursor(context)
-  return createRoot(
-    parseChildren(context, TextModes.DATA, []),
+  return createRoot(  // 创建一个根AST
+    parseChildren(context, TextModes.DATA, []),  // 解析孩子内容
     getSelection(context, start)
   )
 }
 
+// 创建解析上下文
 function createParserContext(
   content: string,
   rawOptions: ParserOptions
 ): ParserContext {
+  // 合并默认配置
   const options = extend({}, defaultParserOptions)
 
   let key: keyof ParserOptions
@@ -133,13 +137,14 @@ function createParserContext(
     line: 1,
     offset: 0,
     originalSource: content,
-    source: content,
+    source: content,  // 将模板字符串保存在source里
     inPre: false,
     inVPre: false,
     onWarn: options.onWarn
   }
 }
 
+// 解析孩子模板内容
 function parseChildren(
   context: ParserContext,
   mode: TextModes,
@@ -147,16 +152,18 @@ function parseChildren(
 ): TemplateChildNode[] {
   const parent = last(ancestors)
   const ns = parent ? parent.ns : Namespaces.HTML
-  const nodes: TemplateChildNode[] = []
+  const nodes: TemplateChildNode[] = []  // 初始化节点容器
 
+  // 遍历模板模板内容（每解析完一部分内容，就会将其在source中删除）
   while (!isEnd(context, mode, ancestors)) {
     __TEST__ && assert(context.source.length > 0)
-    const s = context.source
+    const s = context.source  // 获取剩余的模板字符串
     let node: TemplateChildNode | TemplateChildNode[] | undefined = undefined
 
     if (mode === TextModes.DATA || mode === TextModes.RCDATA) {
       if (!context.inVPre && startsWith(s, context.options.delimiters[0])) {
         // '{{'
+        // 插值节点
         node = parseInterpolation(context, mode)
       } else if (mode === TextModes.DATA && s[0] === '<') {
         // https://html.spec.whatwg.org/multipage/parsing.html#tag-open-state
@@ -201,6 +208,7 @@ function parseChildren(
             node = parseBogusComment(context)
           }
         } else if (/[a-z]/i.test(s[1])) {
+          // 解析元素
           node = parseElement(context, ancestors)
 
           // 2.x <template> with no directive compat
@@ -238,10 +246,12 @@ function parseChildren(
         }
       }
     }
+    // 解析文本
     if (!node) {
       node = parseText(context, mode)
     }
 
+    // 将这部分解析完的节点插入容器中
     if (isArray(node)) {
       for (let i = 0; i < node.length; i++) {
         pushNode(nodes, node[i])
@@ -411,6 +421,7 @@ function parseBogusComment(context: ParserContext): CommentNode | undefined {
   }
 }
 
+// 解析元素节点
 function parseElement(
   context: ParserContext,
   ancestors: ElementNode[]
@@ -421,10 +432,11 @@ function parseElement(
   const wasInPre = context.inPre
   const wasInVPre = context.inVPre
   const parent = last(ancestors)
-  const element = parseTag(context, TagType.Start, parent)
+  const element = parseTag(context, TagType.Start, parent)  // 解析标签
   const isPreBoundary = context.inPre && !wasInPre
   const isVPreBoundary = context.inVPre && !wasInVPre
 
+  // 如果是闭合标签，直接返回
   if (element.isSelfClosing || context.options.isVoidTag(element.tag)) {
     // #4030 self-closing <pre> tag
     if (isPreBoundary) {
@@ -439,6 +451,7 @@ function parseElement(
   // Children.
   ancestors.push(element)
   const mode = context.options.getTextMode(element, parent)
+  // 解析孩子节点
   const children = parseChildren(context, mode, ancestors)
   ancestors.pop()
 
@@ -467,6 +480,7 @@ function parseElement(
   element.children = children
 
   // End tag.
+  // 结束标签
   if (startsWithEndTagOpen(context.source, element.tag)) {
     parseTag(context, TagType.End, parent)
   } else {
@@ -490,6 +504,7 @@ function parseElement(
   return element
 }
 
+// 标签类型
 const enum TagType {
   Start,
   End
@@ -512,6 +527,7 @@ function parseTag(
   type: TagType.End,
   parent: ElementNode | undefined
 ): void
+// 解析标签
 function parseTag(
   context: ParserContext,
   type: TagType,
@@ -525,10 +541,12 @@ function parseTag(
 
   // Tag open.
   const start = getCursor(context)
+  // 正则识别
   const match = /^<\/?([a-z][^\t\r\n\f />]*)/i.exec(context.source)!
   const tag = match[1]
   const ns = context.options.getNamespace(tag, parent)
 
+  // 删除标签文本
   advanceBy(context, match[0].length)
   advanceSpaces(context)
 
@@ -542,6 +560,7 @@ function parseTag(
   }
 
   // Attributes.
+  // 解析属性
   let props = parseAttributes(context, type)
 
   // check v-pre
@@ -559,7 +578,7 @@ function parseTag(
   }
 
   // Tag close.
-  let isSelfClosing = false
+  let isSelfClosing = false  // 判断是否为单标签（自闭合）
   if (context.source.length === 0) {
     emitError(context, ErrorCodes.EOF_IN_TAG)
   } else {
@@ -567,9 +586,11 @@ function parseTag(
     if (type === TagType.End && isSelfClosing) {
       emitError(context, ErrorCodes.END_TAG_WITH_TRAILING_SOLIDUS)
     }
+    // 删除末尾标签
     advanceBy(context, isSelfClosing ? 2 : 1)
   }
 
+  // 如果是结束标签，无需返回节点
   if (type === TagType.End) {
     return
   }
@@ -605,6 +626,7 @@ function parseTag(
     }
   }
 
+  // 判断标签类型
   let tagType = ElementTypes.ELEMENT
   if (!context.inVPre) {
     if (tag === 'slot') {
@@ -636,6 +658,7 @@ function parseTag(
   }
 }
 
+// 判断是组件标签
 function isComponent(
   tag: string,
   props: (AttributeNode | DirectiveNode)[],
@@ -650,7 +673,7 @@ function isComponent(
     /^[A-Z]/.test(tag) ||
     isCoreComponent(tag) ||
     (options.isBuiltInComponent && options.isBuiltInComponent(tag)) ||
-    (options.isNativeTag && !options.isNativeTag(tag))
+    (options.isNativeTag && !options.isNativeTag(tag)) // 判断是否为原生标签
   ) {
     return true
   }
@@ -695,12 +718,14 @@ function isComponent(
   }
 }
 
+// 解析元素属性
 function parseAttributes(
   context: ParserContext,
   type: TagType
 ): (AttributeNode | DirectiveNode)[] {
   const props = []
   const attributeNames = new Set<string>()
+  // 遍历
   while (
     context.source.length > 0 &&
     !startsWith(context.source, '>') &&
@@ -716,6 +741,7 @@ function parseAttributes(
       emitError(context, ErrorCodes.END_TAG_WITH_ATTRIBUTES)
     }
 
+    // 解析单个属性
     const attr = parseAttribute(context, attributeNames)
 
     // Trim whitespace between class
@@ -728,6 +754,7 @@ function parseAttributes(
       attr.value.content = attr.value.content.replace(/\s+/g, ' ').trim()
     }
 
+    // 插入props变量中
     if (type === TagType.Start) {
       props.push(attr)
     }
@@ -735,11 +762,13 @@ function parseAttributes(
     if (/^[^\t\r\n\f />]/.test(context.source)) {
       emitError(context, ErrorCodes.MISSING_WHITESPACE_BETWEEN_ATTRIBUTES)
     }
+    // 删除空格
     advanceSpaces(context)
   }
   return props
 }
 
+// 解析当个属性
 function parseAttribute(
   context: ParserContext,
   nameSet: Set<string>
@@ -751,6 +780,7 @@ function parseAttribute(
   const match = /^[^\t\r\n\f />][^\t\r\n\f />=]*/.exec(context.source)!
   const name = match[0]
 
+  // 避免属性重复
   if (nameSet.has(name)) {
     emitError(context, ErrorCodes.DUPLICATE_ATTRIBUTE)
   }
@@ -771,15 +801,19 @@ function parseAttribute(
     }
   }
 
+  // 删除属性名
   advanceBy(context, name.length)
 
   // Value
   let value: AttributeValue = undefined
 
+  // 获取属性值
   if (/^[\t\r\n\f ]*=/.test(context.source)) {
     advanceSpaces(context)
+    // 删除等于号
     advanceBy(context, 1)
     advanceSpaces(context)
+    // 解析属性值
     value = parseAttributeValue(context)
     if (!value) {
       emitError(context, ErrorCodes.MISSING_ATTRIBUTE_VALUE)
@@ -918,6 +952,7 @@ function parseAttribute(
   }
 }
 
+// 解析属性值
 function parseAttributeValue(context: ParserContext): AttributeValue {
   const start = getCursor(context)
   let content: string
@@ -926,21 +961,27 @@ function parseAttributeValue(context: ParserContext): AttributeValue {
   const isQuoted = quote === `"` || quote === `'`
   if (isQuoted) {
     // Quoted value.
+    // 删除引号
     advanceBy(context, 1)
 
+    // 定位下一个引号，获取内容
     const endIndex = context.source.indexOf(quote)
     if (endIndex === -1) {
+      // 忘记写下一个引号的情况
       content = parseTextData(
         context,
         context.source.length,
         TextModes.ATTRIBUTE_VALUE
       )
     } else {
+      // 获取内容
       content = parseTextData(context, endIndex, TextModes.ATTRIBUTE_VALUE)
+      // 删除结束引号
       advanceBy(context, 1)
     }
   } else {
     // Unquoted
+    // 属性值没有加引号的情况
     const match = /^[^\t\r\n\f >]+/.exec(context.source)
     if (!match) {
       return undefined
@@ -954,33 +995,38 @@ function parseAttributeValue(context: ParserContext): AttributeValue {
         m.index
       )
     }
+    // 获取内容
     content = parseTextData(context, match[0].length, TextModes.ATTRIBUTE_VALUE)
   }
 
   return { content, isQuoted, loc: getSelection(context, start) }
 }
 
+// 解析插值节点
 function parseInterpolation(
   context: ParserContext,
   mode: TextModes
 ): InterpolationNode | undefined {
+  // open -> {{    close -> }}
   const [open, close] = context.options.delimiters
   __TEST__ && assert(startsWith(context.source, open))
 
+  // 获取插值结束下标
   const closeIndex = context.source.indexOf(close, open.length)
+  // 没有插值情况
   if (closeIndex === -1) {
     emitError(context, ErrorCodes.X_MISSING_INTERPOLATION_END)
     return undefined
   }
 
   const start = getCursor(context)
-  advanceBy(context, open.length)
+  advanceBy(context, open.length)   // 先删除左分隔符
   const innerStart = getCursor(context)
   const innerEnd = getCursor(context)
-  const rawContentLength = closeIndex - open.length
-  const rawContent = context.source.slice(0, rawContentLength)
+  const rawContentLength = closeIndex - open.length  // 获取内容长度，包括空格
+  const rawContent = context.source.slice(0, rawContentLength)  // 获取内容
   const preTrimContent = parseTextData(context, rawContentLength, mode)
-  const content = preTrimContent.trim()
+  const content = preTrimContent.trim()  // 去除空格
   const startOffset = preTrimContent.indexOf(content)
   if (startOffset > 0) {
     advancePositionWithMutation(innerStart, rawContent, startOffset)
@@ -988,7 +1034,7 @@ function parseInterpolation(
   const endOffset =
     rawContentLength - (preTrimContent.length - content.length - startOffset)
   advancePositionWithMutation(innerEnd, rawContent, endOffset)
-  advanceBy(context, close.length)
+  advanceBy(context, close.length)  // 删除右分隔符
 
   return {
     type: NodeTypes.INTERPOLATION,
@@ -1004,12 +1050,15 @@ function parseInterpolation(
   }
 }
 
+// 解析文本
 function parseText(context: ParserContext, mode: TextModes): TextNode {
   __TEST__ && assert(context.source.length > 0)
 
+  // 解析到'<'或'{{'
   const endTokens =
     mode === TextModes.CDATA ? [']]>'] : ['<', context.options.delimiters[0]]
 
+  // 开始遍历，求出endIndex
   let endIndex = context.source.length
   for (let i = 0; i < endTokens.length; i++) {
     const index = context.source.indexOf(endTokens[i], 1)
@@ -1021,6 +1070,7 @@ function parseText(context: ParserContext, mode: TextModes): TextNode {
   __TEST__ && assert(endIndex > 0)
 
   const start = getCursor(context)
+  // 解析出文本
   const content = parseTextData(context, endIndex, mode)
 
   return {
@@ -1034,12 +1084,15 @@ function parseText(context: ParserContext, mode: TextModes): TextNode {
  * Get text data with a given length from the current location.
  * This translates HTML entities in the text data.
  */
+// 解析文本内容
 function parseTextData(
   context: ParserContext,
   length: number,
   mode: TextModes
 ): string {
+  // 截取文本原内容
   const rawText = context.source.slice(0, length)
+  // 删除数据
   advanceBy(context, length)
   if (
     mode === TextModes.RAWTEXT ||
@@ -1082,6 +1135,7 @@ function startsWith(source: string, searchString: string): boolean {
   return source.startsWith(searchString)
 }
 
+// 删除已经解析的字符串
 function advanceBy(context: ParserContext, numberOfCharacters: number): void {
   const { source } = context
   __TEST__ && assert(numberOfCharacters <= source.length)
@@ -1089,6 +1143,7 @@ function advanceBy(context: ParserContext, numberOfCharacters: number): void {
   context.source = source.slice(numberOfCharacters)
 }
 
+// 删除空格
 function advanceSpaces(context: ParserContext): void {
   const match = /^[\t\r\n\f ]+/.exec(context.source)
   if (match) {
@@ -1136,6 +1191,7 @@ function isEnd(
 
   switch (mode) {
     case TextModes.DATA:
+      // 如果是闭合标签的话，直接返回true
       if (startsWith(s, '</')) {
         // TODO: probably bad performance
         for (let i = ancestors.length - 1; i >= 0; --i) {
@@ -1165,6 +1221,7 @@ function isEnd(
   return !s
 }
 
+// 结束标签
 function startsWithEndTagOpen(source: string, tag: string): boolean {
   return (
     startsWith(source, '</') &&

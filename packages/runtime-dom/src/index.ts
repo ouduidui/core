@@ -63,6 +63,7 @@ export const hydrate = ((...args) => {
   ensureHydrationRenderer().hydrate(...args)
 }) as RootHydrateFunction
 
+// 真正调用的createApp函数
 export const createApp = ((...args) => {
   const app = ensureRenderer().createApp(...args)
 
@@ -71,8 +72,10 @@ export const createApp = ((...args) => {
     injectCompilerOptionsCheck(app)
   }
 
+  // 获取mount方法
   const { mount } = app
   app.mount = (containerOrSelector: Element | ShadowRoot | string): any => {
+    // 获取节点
     const container = normalizeContainer(containerOrSelector)
     if (!container) return
 
@@ -82,6 +85,7 @@ export const createApp = ((...args) => {
       // Reason: potential execution of JS expressions in in-DOM template.
       // The user must make sure the in-DOM template is trusted. If it's
       // rendered by the server, the template should not contain any user data.
+      // 存储节点数据
       component.template = container.innerHTML
       // 2.x compat check
       if (__COMPAT__ && __DEV__) {
@@ -99,7 +103,9 @@ export const createApp = ((...args) => {
     }
 
     // clear content before mounting
+    // 清除节点数据
     container.innerHTML = ''
+    // 调用原来的mount方法
     const proxy = mount(container, false, container instanceof SVGElement)
     if (container instanceof Element) {
       container.removeAttribute('v-cloak')
