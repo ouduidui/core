@@ -9,6 +9,7 @@ import {
   newTracked,
   wasTracked
 } from './dep'
+import { ComputedRefImpl } from './computed'
 
 // The main WeakMap that stores {target -> key -> dep} connections.
 // Conceptually, it's easier to think of a dependency as a Dep class
@@ -44,8 +45,7 @@ export type DebuggerEventExtraInfo = {
   oldTarget?: Map<any, any> | Set<any>
 }
 
-const effectStack: ReactiveEffect[] = []  // 副作用函数栈，常用于嵌套effect情况下
-let activeEffect: ReactiveEffect | undefined  // 当前正在执行的副作用函数
+export let activeEffect: ReactiveEffect | undefined  // 当前正在执行的副作用函数
 
 export const ITERATE_KEY = Symbol(__DEV__ ? 'iterate' : '')
 export const MAP_KEY_ITERATE_KEY = Symbol(__DEV__ ? 'Map key iterate' : '')
@@ -54,10 +54,18 @@ export const MAP_KEY_ITERATE_KEY = Symbol(__DEV__ ? 'Map key iterate' : '')
 export class ReactiveEffect<T = any> {
   active = true
   deps: Dep[] = []
+  parent: ReactiveEffect | undefined = undefined
 
-  // can be attached after creation
-  computed?: boolean
+  /**
+   * Can be attached after creation
+   * @internal
+   */
+  computed?: ComputedRefImpl<T>
+  /**
+   * @internal
+   */
   allowRecurse?: boolean
+
   onStop?: () => void
   // dev only
   onTrack?: (event: DebuggerEvent) => void
@@ -67,7 +75,7 @@ export class ReactiveEffect<T = any> {
   constructor(
     public fn: () => T,
     public scheduler: EffectScheduler | null = null,
-    scope?: EffectScope | null
+    scope?: EffectScope
   ) {
     recordEffectScope(this, scope)
   }
@@ -77,37 +85,39 @@ export class ReactiveEffect<T = any> {
     if (!this.active) {
       return this.fn()
     }
-    if (!effectStack.includes(this)) {
-      try {
-        // 设置activeEffect为当前副作用函数，并入栈
-        effectStack.push((activeEffect = this))
-        // 开启允许依赖收集模式
-        enableTracking()
 
-        trackOpBit = 1 << ++effectTrackDepth
-
-        if (effectTrackDepth <= maxMarkerBits) {
-          initDepMarkers(this)
-        } else {
-          cleanupEffect(this)
-        }
-        // 执行用户传进来的fn函数，并将结果返回
-        return this.fn()
-      } finally {
-        if (effectTrackDepth <= maxMarkerBits) {
-          finalizeDepMarkers(this)
-        }
-
-        trackOpBit = 1 << --effectTrackDepth
-
-        // 回复上一个依赖收集模式
-        resetTracking()
-        // 将当前effect弹出栈
-        effectStack.pop()
-        const n = effectStack.length
-        // 将activeEffect设置为上一个effect函数或undefined
-        activeEffect = n > 0 ? effectStack[n - 1] : undefined
+    let parent: ReactiveEffect | undefined = activeEffect
+    let lastShouldTrack = shouldTrack
+    while (parent) {
+      if (parent === this) {
+        return
       }
+      parent = parent.parent
+    }
+    try {
+      this.parent = activeEffect
+      activeEffect = this
+      shouldTrack = true
+
+      trackOpBit = 1 << ++effectTrackDepth
+
+      if (effectTrackDepth <= maxMarkerBits) {
+        initDepMarkers(this)
+      } else {
+        cleanupEffect(this)
+      }
+      // 执行用户传进来的fn函数，并将结果返回
+      return this.fn()
+    } finally {
+      if (effectTrackDepth <= maxMarkerBits) {
+        finalizeDepMarkers(this)
+      }
+
+      trackOpBit = 1 << --effectTrackDepth
+
+      activeEffect = this.parent
+      shouldTrack = lastShouldTrack
+      this.parent = undefined
     }
   }
 
@@ -178,7 +188,8 @@ export function stop(runner: ReactiveEffectRunner) {
   runner.effect.stop()
 }
 
-let shouldTrack = true // 限制是否可以进行依赖收集
+
+export let shouldTrack = true // 限制是否可以进行依赖收集
 const trackStack: boolean[] = []
 
 // 暂停依赖收集
@@ -201,34 +212,26 @@ export function resetTracking() {
 
 // 依赖搜集
 export function track(target: object, type: TrackOpTypes, key: unknown) {
-  if (!isTracking()) {
-    return
+  if (shouldTrack && activeEffect) {
+    // 判断是否初始化过depsMap
+    let depsMap = targetMap.get(target)
+    if (!depsMap) {
+      // 初始化depsMap逻辑
+      targetMap.set(target, (depsMap = new Map()))
+    }
+    // 获取依赖dep
+    let dep = depsMap.get(key)
+    if (!dep) {
+      depsMap.set(key, (dep = createDep()))
+    }
+
+    const eventInfo = __DEV__
+      ? { effect: activeEffect, target, type, key }
+      : undefined
+
+    // 进行依赖收集
+    trackEffects(dep, eventInfo)
   }
-
-  // 判断是否初始化过depsMap
-  let depsMap = targetMap.get(target)
-  if (!depsMap) {
-    // 初始化depsMap逻辑
-    targetMap.set(target, (depsMap = new Map()))
-  }
-
-  // 获取依赖dep
-  let dep = depsMap.get(key)
-  if (!dep) {
-    depsMap.set(key, (dep = createDep()))
-  }
-
-  const eventInfo = __DEV__
-    ? { effect: activeEffect, target, type, key }
-    : undefined
-
-  // 进行依赖收集
-  trackEffects(dep, eventInfo)
-}
-
-// 判断是否可以进行依赖收集
-export function isTracking() {
-  return shouldTrack && activeEffect !== undefined
 }
 
 // 依赖收集副作用函数

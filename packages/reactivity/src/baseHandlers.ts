@@ -8,7 +8,8 @@ import {
   reactiveMap,
   shallowReactiveMap,
   shallowReadonlyMap,
-  isReadonly
+  isReadonly,
+  isShallow
 } from './reactive'
 import { TrackOpTypes, TriggerOpTypes } from './operations'
 import {
@@ -88,7 +89,9 @@ function createGetter(isReadonly = false, shallow = false) {
     if (key === ReactiveFlags.IS_REACTIVE) {
       return !isReadonly // 用于isReactive函数
     } else if (key === ReactiveFlags.IS_READONLY) {
-      return isReadonly  // 用于isReadonly函数
+      return isReadonly // 用于isReadonly函数
+    } else if (key === ReactiveFlags.IS_SHALLOW) {
+      return shallow
     } else if (
       key === ReactiveFlags.RAW &&
       receiver ===
@@ -165,10 +168,16 @@ function createSetter(shallow = false) {
     receiver: object
   ): boolean {
     let oldValue = (target as any)[key]
+    if (isReadonly(oldValue) && isRef(oldValue) && !isRef(value)) {
+      return false
+    }
     if (!shallow && !isReadonly(value)) {
-      // 将value和oldValue获取原始值
-      value = toRaw(value)
-      oldValue = toRaw(oldValue)
+      if (!isShallow(value)) {
+        // 将value和oldValue获取原始值
+        value = toRaw(value)
+        oldValue = toRaw(oldValue)
+      }
+
       if (!isArray(target) && isRef(oldValue) && !isRef(value)) {
         oldValue.value = value
         return true

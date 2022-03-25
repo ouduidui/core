@@ -247,8 +247,6 @@ async function publishPackage(pkgName, version, runIfNotDry) {
     return
   }
 
-  // For now, all 3.x packages except "vue" can be published as
-  // `latest`, whereas "vue" will be published under the "next" tag.
   // 生成tag
   let releaseTag = null
   if (args.tag) {
@@ -259,9 +257,6 @@ async function publishPackage(pkgName, version, runIfNotDry) {
     releaseTag = 'beta'
   } else if (version.includes('rc')) {
     releaseTag = 'rc'
-  } else if (pkgName === 'vue') {
-    // TODO remove when 3.x becomes default
-    releaseTag = 'next'
   }
 
   // TODO use inferred release channel after official 3.0 release
